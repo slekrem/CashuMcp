@@ -5,20 +5,20 @@ using DotNut.ApiModels;
 using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
-builder.Services.AddMcpServer()
-    //.WithHttpTransport()
+builder.Logging.AddConsole(consoleLogOptions =>
+{
+    // Configure all logs to go to stderr
+    consoleLogOptions.LogToStandardErrorThreshold = LogLevel.Trace;
+});
+builder.Services
+    .AddMcpServer()
     .WithStdioServerTransport()
     .WithToolsFromAssembly();
 
 // Add HttpClient for Cashu API calls
 builder.Services.AddHttpClient();
 
-var app = builder.Build();
-
-//app.MapMcp();
-
-//app.Run("http://localhost:3001");
-await app.RunAsync();
+await builder.Build().RunAsync();
 
 [McpServerToolType]
 public static class CashuMintTools
