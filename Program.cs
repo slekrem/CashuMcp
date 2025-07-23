@@ -147,4 +147,106 @@ public static class CashuMintTools
             return JsonSerializer.Serialize(new { error = ex.Message }, new JsonSerializerOptions { WriteIndented = true });
         }
     }
+
+    [McpServerTool, Description("Request a mint quote for creating new Cashu tokens. Returns a Lightning invoice to pay.")]
+    public static async Task<string> RequestMintQuote(string mintUrl, ulong amount, string unit = "sat", string? description = null)
+    {
+        try
+        {
+            using var httpClient = new HttpClient { BaseAddress = new Uri(mintUrl) };
+            var cashuClient = new CashuHttpClient(httpClient);
+            
+            var request = new PostMintQuoteBolt11Request
+            {
+                Amount = amount,
+                Unit = unit,
+                Description = description
+            };
+            
+            var response = await cashuClient.CreateMintQuote<PostMintQuoteBolt11Response, PostMintQuoteBolt11Request>("bolt11", request);
+            
+            return JsonSerializer.Serialize(new
+            {
+                quote = response.Quote,
+                request = response.Request,
+                state = response.State,
+                expiry = response.Expiry,
+                amount = response.Amount,
+                unit = response.Unit
+            }, new JsonSerializerOptions { WriteIndented = true });
+        }
+        catch (Exception ex)
+        {
+            return JsonSerializer.Serialize(new { error = ex.Message }, new JsonSerializerOptions { WriteIndented = true });
+        }
+    }
+
+    [McpServerTool, Description("Check the state of a mint quote to see if the Lightning invoice has been paid.")]
+    public static async Task<string> GetMintQuoteState(string mintUrl, string quoteId)
+    {
+        try
+        {
+            using var httpClient = new HttpClient { BaseAddress = new Uri(mintUrl) };
+            var cashuClient = new CashuHttpClient(httpClient);
+            
+            var response = await cashuClient.CheckMintQuote<PostMintQuoteBolt11Response>("bolt11", quoteId);
+            
+            return JsonSerializer.Serialize(new
+            {
+                quote = response.Quote,
+                request = response.Request,
+                state = response.State,
+                expiry = response.Expiry,
+                amount = response.Amount,
+                unit = response.Unit
+            }, new JsonSerializerOptions { WriteIndented = true });
+        }
+        catch (Exception ex)
+        {
+            return JsonSerializer.Serialize(new { error = ex.Message }, new JsonSerializerOptions { WriteIndented = true });
+        }
+    }
+
+    [McpServerTool, Description("Execute mint operation to create Cashu tokens after paying the Lightning invoice. Requires blinded outputs.")]
+    public static async Task<string> ExecuteMint(string mintUrl, string quoteId, string blindedOutputsJson)
+    {
+        try
+        {
+            using var httpClient = new HttpClient { BaseAddress = new Uri(mintUrl) };
+            var cashuClient = new CashuHttpClient(httpClient);
+            
+            var blindedOutputs = JsonSerializer.Deserialize<DotNut.BlindedMessage[]>(blindedOutputsJson);
+            if (blindedOutputs == null || blindedOutputs.Length == 0)
+            {
+                return JsonSerializer.Serialize(new { error = "Invalid or empty blinded outputs array" });
+            }
+            
+            var request = new PostMintBolt11Request
+            {
+                Quote = quoteId,
+                Outputs = blindedOutputs
+            };
+            
+            var response = await cashuClient.Mint<PostMintBolt11Request, PostMintBolt11Response>("bolt11", request);
+            
+            return JsonSerializer.Serialize(new
+            {
+                signatures = response.Signatures.Select(s => new
+                {
+                    id = s.Id.ToString(),
+                    amount = s.Amount,
+                    C_ = s.C_.ToString(),
+                    dleq = s.DLEQ != null ? new
+                    {
+                        e = s.DLEQ.E.ToString(),
+                        s = s.DLEQ.S.ToString()
+                    } : null
+                })
+            }, new JsonSerializerOptions { WriteIndented = true });
+        }
+        catch (Exception ex)
+        {
+            return JsonSerializer.Serialize(new { error = ex.Message }, new JsonSerializerOptions { WriteIndented = true });
+        }
+    }
 }
